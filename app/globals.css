@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  height: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: #F7F7F5;
+  color: #1C1F26;
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.stub {
+  position: relative;
+  overflow: hidden;
+}
+.stub::after {
+  content: "";
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  background: #F7F7F5;
+  border-radius: 50%;
+}
+
+.perf {
+  height: 0;
+  border-top: 2px dashed #DADCE0;
+  position: relative;
+}
+.perf::before, .perf::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  background: rgba(28,31,38,.65);
+  border-radius: 50%;
+}
+.perf::before { left: -33px; }
+.perf::after { right: -33px; }
+
