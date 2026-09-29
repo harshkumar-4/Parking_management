@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "powershell -Command \"Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue\"; next build",
     "start": "next start",
+    "clean": "powershell -Command \"Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue\"",
     "lint": "next lint"
   },
   "dependencies": {

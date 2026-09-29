@@ -6,8 +6,11 @@ const oswald = Oswald({ subsets: ["latin"], weight: ["400", "500", "600", "700"]
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Shambhu Car Parking",
-  description: "Digital entry & exit register",
+  title: {
+    default: "Shambhu Parking and Washing Centre",
+    template: "%s | Shambhu Parking",
+  },
+  description: "Digital vehicle entry, exit, parking rates, monthly passes, and database search management system.",
 };
 
 export const viewport: Viewport = {
