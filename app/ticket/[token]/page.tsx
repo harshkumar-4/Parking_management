@@ -46,10 +46,18 @@ export default function PublicTicketPage({ params }: { params: { token: string }
 
         <div className="px-5 py-5 sm:px-6 sm:py-6">
           <Row k="Vehicle" v={session.vehicle_number} isVehicle />
+          {session.helmet && session.vehicle_type === "Bike" && (
+            <Row k="Helmet" v="Yes (+₹5/hr)" />
+          )}
           <Row k="Entry" v={fmtTimeShort(session.entry_time)} />
+
           {!isIn && session.exit_time && <Row k="Exit" v={fmtTimeShort(session.exit_time)} />}
           <Row k="Amount" v={`₹${session.parking_amount}`} />
-          <Row k="Payment" v={session.payment_method} last />
+          <Row k="Payment" v={session.covered_by_pass ? "Monthly Pass" : session.payment_method} last={!session.covered_by_pass} />
+          {session.covered_by_pass && (
+            <Row k="Pass Status" v="🎫 Covered by active pass" last />
+          )}
+
 
           <div className={`text-center font-sign font-bold text-base pt-4 ${isIn ? "text-go" : "text-stop"}`}>
             {isIn ? "🟢 VEHICLE INSIDE" : "🔴 VEHICLE EXITED"}

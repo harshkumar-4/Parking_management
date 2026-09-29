@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import type { ParkingSession, ParkingRate } from "@/lib/types";
 import { fmtTimeShort, fmtDuration, calcAmount } from "@/lib/helpers";
 import TicketView from "@/components/TicketView";
+import PaymentModal from "@/components/PaymentModal";
 import Link from "next/link";
 
 export default function DashboardPage() {
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [ticket, setTicket] = useState<ParkingSession | null>(null);
   const [exitProcessing, setExitProcessing] = useState<string | null>(null);
   const [exitedSession, setExitedSession] = useState<ParkingSession | null>(null);
+  const [selectedExitSession, setSelectedExitSession] = useState<{ session: ParkingSession; amount: number } | null>(null);
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
   // Update current time every 30 seconds for live elapsed duration counters
@@ -41,24 +43,52 @@ export default function DashboardPage() {
   }
 
   async function handleQuickExit(s: ParkingSession) {
+    if (s.covered_by_pass) {
+      completeQuickExit(s, 0, "Pass");
+      return;
+    }
+
     setExitProcessing(s.id);
-    const { data: rates } = await supabase.from("parking_rates").select("*");
     const now = new Date().toISOString();
-    const { amount, duration } = calcAmount((rates as ParkingRate[]) ?? [], s.vehicle_type, s.entry_time, now);
-    
+    const { data: rates } = await supabase.from("parking_rates").select("*");
+    let effectiveRates = (rates as ParkingRate[]) ?? [];
+    if (s.helmet && s.vehicle_type === "Bike") {
+      effectiveRates = effectiveRates.map((r) =>
+        r.vehicle_type === "Bike" ? { ...r, rate: Number(r.rate) + 5 } : r
+      );
+    }
+    const res = calcAmount(effectiveRates, s.vehicle_type, s.entry_time, now);
+    setExitProcessing(null);
+    setSelectedExitSession({ session: s, amount: res.amount });
+  }
+
+  async function completeQuickExit(s: ParkingSession, amount: number, method: "Cash" | "Paytm" | "Pass") {
+    setExitProcessing(s.id);
+    const now = new Date().toISOString();
+    const duration = Math.max(1, Math.round((new Date(now).getTime() - new Date(s.entry_time).getTime()) / 60000));
+
     const { data, error } = await supabase
       .from("parking_sessions")
-      .update({ exit_time: now, duration_minutes: duration, parking_amount: amount, status: "exited" })
+      .update({
+        exit_time: now,
+        duration_minutes: duration,
+        parking_amount: amount,
+        payment_method: method,
+        status: "exited",
+      })
       .eq("id", s.id)
       .select()
       .single();
 
     setExitProcessing(null);
+    setSelectedExitSession(null);
+
     if (!error && data) {
       setExitedSession(data as ParkingSession);
       load();
     }
   }
+
 
   const inside = sessions.filter((s) => s.status === "inside");
   const todayStr = new Date().toDateString();
@@ -274,6 +304,8 @@ export default function DashboardPage() {
                       <span className="text-[9px] font-sans font-extrabold mr-1.5 opacity-80 border-r border-black/30 pr-1">IND</span>
                       {s.vehicle_number}
                     </div>
+                    {s.helmet && <span className="text-base" title="Helmet provided">🪖</span>}
+
 
                     <div className="flex items-center gap-1.5">
                       <span className="text-[11px] font-semibold text-steel bg-lane px-2 py-0.5 rounded">
@@ -342,7 +374,9 @@ export default function DashboardPage() {
                           <span className="text-[8px] font-sans font-extrabold mr-1 opacity-75 border-r border-black/30 pr-1">IND</span>
                           {s.vehicle_number}
                         </span>
+                        {s.helmet && <span className="ml-1.5 text-sm" title="Helmet provided">🪖</span>}
                       </td>
+
                       <td className="py-3 px-4 font-medium text-asphalt">{s.vehicle_type}</td>
                       <td className="py-3 px-4 text-asphalt font-medium">{s.driver_name}</td>
                       <td className="py-3 px-4 text-steel whitespace-nowrap">{fmtTimeShort(s.entry_time)}</td>
@@ -378,8 +412,20 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* Payment Selection Modal */}
+      {selectedExitSession && (
+        <PaymentModal
+          session={selectedExitSession.session}
+          amount={selectedExitSession.amount}
+          processing={exitProcessing === selectedExitSession.session.id}
+          onClose={() => setSelectedExitSession(null)}
+          onConfirm={(method) => completeQuickExit(selectedExitSession.session, selectedExitSession.amount, method)}
+        />
+      )}
+
       {/* Ticket Modal */}
       {(ticket || exitedSession) && (
+
         <div
           className="fixed inset-0 bg-asphalt/70 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto z-50 animate-fadeIn"
           onClick={(e) => {

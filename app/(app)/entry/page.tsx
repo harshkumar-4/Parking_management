@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import type { ParkingRate, ParkingSession } from "@/lib/types";
-import { genTicketNo, rateFor } from "@/lib/helpers";
+import type { ParkingPass, ParkingRate, ParkingSession } from "@/lib/types";
+import { genTicketNo, isPassActive, rateFor } from "@/lib/helpers";
 import TicketView from "@/components/TicketView";
 
 export default function EntryPage() {
@@ -14,6 +14,8 @@ export default function EntryPage() {
   const [phone, setPhone] = useState("");
   const [type, setType] = useState("");
   const [rate, setRate] = useState(0);
+  const [helmet, setHelmet] = useState(false);
+  const [activePass, setActivePass] = useState<ParkingPass | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<ParkingSession | null>(null);
@@ -27,8 +29,28 @@ export default function EntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const v = vehicleNumber.trim().toUpperCase();
+    if (!v) {
+      setActivePass(null);
+      return;
+    }
+    supabase
+      .from("parking_passes")
+      .select("*")
+      .eq("vehicle_number", v)
+      .then(({ data }) => {
+        const passes = (data as ParkingPass[]) ?? [];
+        const active = passes.find((p) => isPassActive(p));
+        setActivePass(active ?? null);
+      });
+  }, [vehicleNumber]);
+
   function onTypeChange(t: string) {
     setType(t);
+    if (t !== "Bike") {
+      setHelmet(false);
+    }
     const r = rateFor(rates, t);
     if (r) setRate(r.rate);
   }
@@ -40,6 +62,10 @@ export default function EntryPage() {
       return;
     }
     setSaving(true);
+    const isCovered = Boolean(activePass);
+    const finalRate = isCovered ? 0 : ((type === "Bike" && helmet) ? rate + 5 : rate);
+    const paymentMethod = isCovered ? "Pass" : "Cash";
+
     const { data, error } = await supabase
       .from("parking_sessions")
       .insert({
@@ -48,17 +74,21 @@ export default function EntryPage() {
         vehicle_type: type,
         driver_name: driverName.trim(),
         driver_phone: phone.trim(),
-        parking_amount: rate,
-        payment_method: "Cash",
+        parking_amount: finalRate,
+        payment_method: paymentMethod,
         status: "inside",
+        helmet: helmet,
+        covered_by_pass: isCovered,
       })
       .select()
       .single();
     setSaving(false);
     if (error) { setError(error.message); return; }
     setCreated(data as ParkingSession);
-    setVehicleNumber(""); setDriverName(""); setPhone("");
+    setVehicleNumber(""); setDriverName(""); setPhone(""); setHelmet(false); setActivePass(null);
   }
+
+
 
   return (
     <div>
@@ -110,13 +140,38 @@ export default function EntryPage() {
           </Field>
           <Field label="Parking rate (₹)">
             <input
-              type="number"
-              value={rate}
-              onChange={(e) => setRate(Number(e.target.value))}
-              className="input"
+              type={activePass ? "text" : "number"}
+              value={activePass ? "Free — Active Pass" : ((type === "Bike" && helmet) ? rate + 5 : rate)}
+              readOnly
+              disabled
+              className="input bg-gray-100 text-steel cursor-not-allowed font-semibold"
             />
+            <p className="text-[11px] text-steel -mt-2.5 mb-3.5">
+              {activePass ? "Covered by active monthly pass" : "Auto-calculated from vehicle type and helmet status"}
+            </p>
           </Field>
         </div>
+
+        {type === "Bike" && (
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="helmet"
+              checked={helmet}
+              onChange={(e) => setHelmet(e.target.checked)}
+              className="w-4 h-4 accent-amber cursor-pointer"
+            />
+            <label htmlFor="helmet" className="text-xs sm:text-sm font-semibold text-asphalt cursor-pointer">
+              🪖 Helmet provided (+₹5/hr)
+            </label>
+          </div>
+        )}
+
+        {activePass && (
+          <div className="mb-4 p-3 bg-go/10 border border-go/30 rounded-lg text-go font-semibold text-xs sm:text-sm">
+            🎫 Active monthly pass — valid until {activePass.expiry_date}. This entry is free.
+          </div>
+        )}
 
         {error && <p className="text-stop text-xs font-semibold mb-3.5 bg-stop/10 border border-stop/20 p-2.5 rounded-md">{error}</p>}
         
@@ -127,6 +182,7 @@ export default function EntryPage() {
         >
           {saving ? "Saving…" : "VEHICLE IN"}
         </button>
+
       </div>
 
       {created && (

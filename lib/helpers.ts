@@ -51,3 +51,14 @@ export function exitMessage(s: ParkingSession) {
   return `🚛 Shambhu Car Parking\nVehicle: ${s.vehicle_number}\nEntry: ${fmtTimeShort(s.entry_time)}\nExit: ${fmtTimeShort(s.exit_time!)}\nParking: ₹${s.parking_amount}\nPayment: Cash\nStatus: 🔴 Exited\nDetails: ${trackLink(s.public_token)}`;
 }
 
+export function isPassActive(p: { expiry_date: string }) {
+  return new Date(p.expiry_date) >= new Date(new Date().toDateString());
+}
+
+export function daysUntilExpiry(expiry_date: string) {
+  const diff = new Date(expiry_date).getTime() - new Date(new Date().toDateString()).getTime();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+
+

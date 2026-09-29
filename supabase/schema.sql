@@ -25,9 +25,11 @@ create table if not exists parking_sessions (
   parking_amount numeric not null default 0,
   payment_method text not null default 'Cash',
   status text not null default 'inside' check (status in ('inside','exited')),
+  helmet boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
 
 create index if not exists idx_sessions_status on parking_sessions(status);
 create index if not exists idx_sessions_vehicle on parking_sessions(vehicle_number);

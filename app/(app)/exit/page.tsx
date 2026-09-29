@@ -5,6 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import type { ParkingRate, ParkingSession } from "@/lib/types";
 import { calcAmount, fmtTime } from "@/lib/helpers";
 import TicketView from "@/components/TicketView";
+import PaymentModal from "@/components/PaymentModal";
 
 export default function ExitPage() {
   const supabase = supabaseBrowser();
@@ -12,6 +13,8 @@ export default function ExitPage() {
   const [found, setFound] = useState<ParkingSession | null | undefined>(undefined);
   const [exited, setExited] = useState<ParkingSession | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [pendingAmount, setPendingAmount] = useState(0);
 
   async function search() {
     const q = query.trim().toUpperCase();
@@ -26,19 +29,55 @@ export default function ExitPage() {
     setFound((data as ParkingSession) ?? null);
   }
 
-  async function vehicleOut() {
+  async function handleVehicleOutClick() {
+    if (!found) return;
+    if (found.covered_by_pass) {
+      completeExit("Pass");
+      return;
+    }
+
+    setProcessing(true);
+    const now = new Date().toISOString();
+    const { data: rates } = await supabase.from("parking_rates").select("*");
+    let effectiveRates = (rates as ParkingRate[]) ?? [];
+    if (found.helmet && found.vehicle_type === "Bike") {
+      effectiveRates = effectiveRates.map((r) =>
+        r.vehicle_type === "Bike" ? { ...r, rate: Number(r.rate) + 5 } : r
+      );
+    }
+    const res = calcAmount(effectiveRates, found.vehicle_type, found.entry_time, now);
+    setPendingAmount(res.amount);
+    setProcessing(false);
+    setShowPaymentModal(true);
+  }
+
+  async function completeExit(method: "Cash" | "Paytm" | "Pass") {
     if (!found) return;
     setProcessing(true);
-    const { data: rates } = await supabase.from("parking_rates").select("*");
     const now = new Date().toISOString();
-    const { amount, duration } = calcAmount((rates as ParkingRate[]) ?? [], found.vehicle_type, found.entry_time, now);
+    let amount = 0;
+    let duration = Math.max(1, Math.round((new Date(now).getTime() - new Date(found.entry_time).getTime()) / 60000));
+
+    if (method !== "Pass") {
+      amount = pendingAmount;
+    }
+
     const { data, error } = await supabase
       .from("parking_sessions")
-      .update({ exit_time: now, duration_minutes: duration, parking_amount: amount, status: "exited" })
+      .update({
+        exit_time: now,
+        duration_minutes: duration,
+        parking_amount: amount,
+        payment_method: method,
+        status: "exited",
+      })
       .eq("id", found.id)
       .select()
       .single();
+
     setProcessing(false);
+    setShowPaymentModal(false);
+
     if (!error) {
       setExited(data as ParkingSession);
       setFound(undefined);
@@ -81,13 +120,23 @@ export default function ExitPage() {
           <Row k="Status" v="🟢 Inside" green />
           
           <button
-            onClick={vehicleOut}
+            onClick={handleVehicleOutClick}
             disabled={processing}
             className="w-full bg-amber hover:bg-amberDim text-asphalt font-bold text-base py-3.5 rounded-lg mt-5 shadow-sm transition-transform active:scale-[0.99] disabled:opacity-50"
           >
             {processing ? "Processing…" : "VEHICLE OUT"}
           </button>
         </div>
+      )}
+
+      {showPaymentModal && found && (
+        <PaymentModal
+          session={found}
+          amount={pendingAmount}
+          processing={processing}
+          onClose={() => setShowPaymentModal(false)}
+          onConfirm={(method) => completeExit(method)}
+        />
       )}
 
       {exited && (
@@ -101,6 +150,7 @@ export default function ExitPage() {
     </div>
   );
 }
+
 
 function Row({ k, v, green, isVehicle }: { k: string; v: string; green?: boolean; isVehicle?: boolean }) {
   return (

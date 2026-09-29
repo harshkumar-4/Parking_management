@@ -6,6 +6,17 @@ export type ParkingRate = {
   active: boolean;
 };
 
+export type ParkingPass = {
+  id: string;
+  vehicle_number: string;
+  vehicle_type: string;
+  driver_name: string | null;
+  driver_phone: string | null;
+  price: number;
+  issued_date: string;
+  expiry_date: string;
+};
+
 export type ParkingSession = {
   id: string;
   ticket_number: string;
@@ -20,4 +31,8 @@ export type ParkingSession = {
   parking_amount: number;
   payment_method: string;
   status: "inside" | "exited";
+  helmet: boolean;
+  covered_by_pass: boolean;
 };
+
+
