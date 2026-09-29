@@ -83,7 +83,7 @@ export default function Nav() {
           </div>
           <div className="min-w-0">
             <h1 className="font-sign font-semibold text-lane text-base sm:text-[17px] leading-tight truncate">
-              Shambhu Car Parking
+              Shambhu parking and washing centre
             </h1>
           </div>
         </div>
@@ -102,11 +102,10 @@ export default function Nav() {
             <Link
               key={t.href}
               href={t.href}
-              className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-2.5 rounded-t-md whitespace-nowrap transition-colors ${
-                isActive
+              className={`flex items-center gap-1.5 text-xs sm:text-sm font-semibold px-3 py-2.5 rounded-t-md whitespace-nowrap transition-colors ${isActive
                   ? "bg-lane text-asphalt shadow-sm"
                   : "text-[#B7BCC6] hover:text-lane hover:bg-white/5"
-              }`}
+                }`}
             >
               <span className={isActive ? "text-asphalt" : "text-amber"}>{t.icon}</span>
               <span>{t.label}</span>

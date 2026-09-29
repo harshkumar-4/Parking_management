@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import type { ParkingPass, ParkingRate } from "@/lib/types";
-import { daysUntilExpiry } from "@/lib/helpers";
+import { daysUntilExpiry, waLink, smsLink, telLink, passMessage } from "@/lib/helpers";
 
 export default function PassesPage() {
   const supabase = supabaseBrowser();
@@ -310,52 +310,86 @@ export default function PassesPage() {
         ) : (
           <>
             {/* Mobile Card List (< sm) */}
-            <div className="grid grid-cols-1 gap-3 sm:hidden">
+            <div className="grid grid-cols-1 gap-3.5 sm:hidden">
               {sortedPasses.map((p) => {
                 const days = daysUntilExpiry(p.expiry_date);
+                const msg = passMessage(p);
                 return (
-                  <div key={p.id} className="border border-steelLine rounded-lg p-3.5 bg-lane/30 space-y-2">
+                  <div key={p.id} className="border border-steelLine rounded-xl p-3.5 bg-lane/30 space-y-2.5 shadow-2xs">
                     <div className="flex items-center justify-between">
-                      <span className="font-sign font-bold text-base text-asphalt bg-amber/20 border border-amber/40 px-2 py-0.5 rounded">
+                      <span className="font-sign font-bold text-base text-asphalt bg-amber/20 border border-amber/40 px-2.5 py-0.5 rounded-md tracking-wide">
                         {p.vehicle_number}
                       </span>
                       <StatusBadge days={days} />
                     </div>
 
+                    {/* Driver details */}
+                    {(p.driver_name || p.driver_phone) && (
+                      <div className="text-xs text-asphalt font-medium flex items-center justify-between bg-white px-2.5 py-1.5 rounded-lg border border-steelLine/60">
+                        <span>👤 {p.driver_name || "Driver"}</span>
+                        {p.driver_phone && <span className="font-mono text-steel">📞 {p.driver_phone}</span>}
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2 text-xs text-steel border-y border-dashed border-steelLine/60 py-2">
                       <div>
-                        <span className="block text-[10px] uppercase text-steel/70">Type</span>
+                        <span className="block text-[10px] uppercase font-bold text-steel/70">Type</span>
                         <span className="font-semibold text-asphalt text-xs">{p.vehicle_type}</span>
                       </div>
                       <div>
-                        <span className="block text-[10px] uppercase text-steel/70">Price</span>
+                        <span className="block text-[10px] uppercase font-bold text-steel/70">Price (₹)</span>
                         <input
                           type="number"
                           defaultValue={p.price}
                           onBlur={(e) => updatePassPrice(p.id, Number(e.target.value))}
-                          className="w-20 px-1.5 py-0.5 border border-steelLine rounded text-xs bg-white"
+                          className="w-20 px-1.5 py-0.5 border border-steelLine rounded text-xs bg-white font-semibold text-asphalt"
                         />
                       </div>
                       <div>
-                        <span className="block text-[10px] uppercase text-steel/70">Issued</span>
+                        <span className="block text-[10px] uppercase font-bold text-steel/70">Issued</span>
                         <span className="font-semibold text-asphalt text-xs">{p.issued_date}</span>
                       </div>
                       <div>
-                        <span className="block text-[10px] uppercase text-steel/70">Expiry</span>
+                        <span className="block text-[10px] uppercase font-bold text-steel/70">Expiry</span>
                         <span className="font-semibold text-asphalt text-xs">{p.expiry_date}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-1">
+                    {/* Quick Contact Buttons */}
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <a
+                        href={waLink(p.driver_phone || "", msg)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-white text-[11px] font-bold py-1.5 rounded-lg transition-colors text-center inline-flex items-center justify-center gap-1 shadow-2xs"
+                      >
+                        💬 WhatsApp
+                      </a>
+                      <a
+                        href={smsLink(p.driver_phone || "", msg)}
+                        className="flex-1 bg-[#007AFF] hover:bg-[#0062cc] text-white text-[11px] font-bold py-1.5 rounded-lg transition-colors text-center inline-flex items-center justify-center gap-1 shadow-2xs"
+                      >
+                        ✉️ SMS
+                      </a>
+                      <a
+                        href={telLink(p.driver_phone || "")}
+                        className="bg-asphalt hover:bg-asphalt2 text-lane text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors text-center inline-flex items-center justify-center gap-1 shadow-2xs"
+                      >
+                        📞 Call
+                      </a>
+                    </div>
+
+                    {/* Management Actions */}
+                    <div className="flex items-center gap-2 pt-1 border-t border-steelLine/40">
                       <button
                         onClick={() => renewPass(p.id)}
-                        className="flex-1 bg-amber hover:bg-amberDim text-asphalt text-xs font-bold py-1.5 rounded transition-colors text-center"
+                        className="flex-1 bg-amber hover:bg-amberDim text-asphalt text-xs font-bold py-1.5 rounded-lg transition-colors text-center shadow-2xs"
                       >
-                        Renew (30 Days)
+                        🔄 Renew (30 Days)
                       </button>
                       <button
                         onClick={() => removePass(p.id)}
-                        className="border border-stop/30 hover:border-stop text-stop text-xs font-semibold px-3 py-1.5 rounded transition-colors"
+                        className="border border-stop/30 hover:border-stop text-stop text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
                       >
                         Remove
                       </button>
@@ -371,27 +405,33 @@ export default function PassesPage() {
                 <thead>
                   <tr className="border-b-2 border-asphalt text-left text-steel text-xs bg-lane">
                     <th className="py-2.5 px-3">Vehicle</th>
+                    <th className="py-2.5 px-3">Driver Info</th>
                     <th className="py-2.5 px-3">Type</th>
                     <th className="py-2.5 px-3">Price (₹)</th>
                     <th className="py-2.5 px-3">Issued</th>
                     <th className="py-2.5 px-3">Expiry</th>
                     <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Actions</th>
+                    <th className="py-2.5 px-3 text-right">Actions & Contact</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-steelLine">
                   {sortedPasses.map((p) => {
                     const days = daysUntilExpiry(p.expiry_date);
+                    const msg = passMessage(p);
                     return (
                       <tr key={p.id} className="hover:bg-lane/50 transition-colors">
                         <td className="py-3 px-3 font-sign font-semibold text-base">{p.vehicle_number}</td>
+                        <td className="py-3 px-3 text-xs">
+                          <div className="font-semibold text-asphalt">{p.driver_name || "—"}</div>
+                          <div className="text-steel font-mono">{p.driver_phone || "—"}</div>
+                        </td>
                         <td className="py-3 px-3">{p.vehicle_type}</td>
                         <td className="py-3 px-3">
                           <input
                             type="number"
                             defaultValue={p.price}
                             onBlur={(e) => updatePassPrice(p.id, Number(e.target.value))}
-                            className="w-20 px-2 py-1 border border-steelLine rounded text-sm bg-white"
+                            className="w-20 px-2 py-1 border border-steelLine rounded text-sm bg-white font-semibold"
                           />
                         </td>
                         <td className="py-3 px-3 text-xs">{p.issued_date}</td>
@@ -400,7 +440,30 @@ export default function PassesPage() {
                           <StatusBadge days={days} />
                         </td>
                         <td className="py-3 px-3 text-right">
-                          <div className="inline-flex items-center gap-2">
+                          <div className="inline-flex items-center gap-1.5">
+                            <a
+                              href={waLink(p.driver_phone || "", msg)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-semibold px-2.5 py-1.5 rounded transition-colors"
+                              title="Send WhatsApp Message"
+                            >
+                              💬 WA
+                            </a>
+                            <a
+                              href={smsLink(p.driver_phone || "", msg)}
+                              className="bg-[#007AFF] hover:bg-[#0062cc] text-white text-xs font-semibold px-2.5 py-1.5 rounded transition-colors"
+                              title="Send SMS"
+                            >
+                              ✉️ SMS
+                            </a>
+                            <a
+                              href={telLink(p.driver_phone || "")}
+                              className="bg-asphalt text-lane hover:bg-asphalt2 text-xs font-semibold px-2.5 py-1.5 rounded transition-colors"
+                              title="Call Driver"
+                            >
+                              📞 Call
+                            </a>
                             <button
                               onClick={() => renewPass(p.id)}
                               className="bg-amber hover:bg-amberDim text-asphalt text-xs font-bold px-3 py-1.5 rounded transition-colors"

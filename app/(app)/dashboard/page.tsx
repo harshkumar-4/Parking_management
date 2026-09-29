@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import type { ParkingSession, ParkingRate } from "@/lib/types";
-import { fmtTimeShort, fmtDuration, calcAmount } from "@/lib/helpers";
+import type { ParkingSession, ParkingRate, ParkingPass } from "@/lib/types";
+import { fmtTimeShort, fmtDuration, calcAmount, daysUntilExpiry, passMessage, waLink, smsLink, telLink } from "@/lib/helpers";
 import TicketView from "@/components/TicketView";
 import PaymentModal from "@/components/PaymentModal";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import Link from "next/link";
 export default function DashboardPage() {
   const supabase = supabaseBrowser();
   const [sessions, setSessions] = useState<ParkingSession[]>([]);
+  const [passes, setPasses] = useState<ParkingPass[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -28,18 +29,52 @@ export default function DashboardPage() {
 
   useEffect(() => {
     load();
-    const channel = supabase
+    const sessionChannel = supabase
       .channel("dashboard-sessions")
       .on("postgres_changes", { event: "*", schema: "public", table: "parking_sessions" }, load)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const passesChannel = supabase
+      .channel("dashboard-passes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "parking_passes" }, load)
+      .subscribe();
+    return () => {
+      supabase.removeChannel(sessionChannel);
+      supabase.removeChannel(passesChannel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function load() {
     const { data } = await supabase.from("parking_sessions").select("*").order("entry_time", { ascending: false });
     setSessions((data as ParkingSession[]) ?? []);
+
+    const { data: passesData } = await supabase.from("parking_passes").select("*");
+    setPasses((passesData as ParkingPass[]) ?? []);
     setLoading(false);
+  }
+
+  const expiringPasses = useMemo(() => {
+    return passes
+      .filter((p) => daysUntilExpiry(p.expiry_date) <= 2)
+      .sort((a, b) => daysUntilExpiry(a.expiry_date) - daysUntilExpiry(b.expiry_date));
+  }, [passes]);
+
+  async function renewPassFromDashboard(id: string) {
+    const today = new Date().toISOString().split("T")[0];
+    const expiry = new Date(today);
+    expiry.setDate(expiry.getDate() + 30);
+    const expiryStr = expiry.toISOString().split("T")[0];
+
+    const { data } = await supabase
+      .from("parking_passes")
+      .update({ issued_date: today, expiry_date: expiryStr })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (data) {
+      setPasses((prev) => prev.map((p) => (p.id === id ? (data as ParkingPass) : p)));
+    }
   }
 
   async function handleQuickExit(s: ParkingSession) {
@@ -156,6 +191,138 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+      </div>
+
+      {/* Pass Expiry & Customer Contact Alerts (ALWAYS SHOWN) */}
+      <div className="bg-white border border-steelLine rounded-2xl p-4 sm:p-5 shadow-sm space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-steelLine/60 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg shrink-0 ${
+              expiringPasses.length > 0 ? "bg-stop/10 text-stop" : "bg-[#E6F4EC] text-go"
+            }`}>
+              {expiringPasses.length > 0 ? "⚠️" : "🔔"}
+            </div>
+            <div>
+              <h3 className="font-sign font-bold text-base sm:text-lg text-asphalt flex items-center gap-2">
+                <span>Pass Expiry Alerts</span>
+                {expiringPasses.length > 0 ? (
+                  <span className="bg-stop text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full animate-pulse">
+                    {expiringPasses.length} Need Action
+                  </span>
+                ) : (
+                  <span className="bg-[#E6F4EC] text-go text-xs font-bold px-2.5 py-0.5 rounded-full">
+                    🟢 All Good
+                  </span>
+                )}
+              </h3>
+              <p className="text-steel text-xs">
+                {expiringPasses.length > 0
+                  ? "Passes expiring in <= 2 days or expired. Call or message customer for pass payment."
+                  : "No passes expiring within 2 days. All monthly passes are active."}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/passes"
+            className="text-xs font-bold text-asphalt hover:text-amberDim underline shrink-0 self-start sm:self-auto"
+          >
+            Manage Passes ({passes.length}) →
+          </Link>
+        </div>
+
+        {expiringPasses.length === 0 ? (
+          <div className="bg-lane/40 border border-steelLine/60 rounded-xl p-3.5 text-center text-steel flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-left">
+              <span className="text-xl">✅</span>
+              <div>
+                <span className="font-semibold text-asphalt text-xs sm:text-sm block">0 Passes Expiring Soon</span>
+                <span className="text-[11px] text-steel">Total {passes.length} active monthly pass(es) logged in system.</span>
+              </div>
+            </div>
+            <Link
+              href="/passes"
+              className="bg-amber hover:bg-amberDim text-asphalt text-xs font-bold px-3.5 py-2 rounded-lg transition-colors w-full sm:w-auto text-center"
+            >
+              + Issue New Pass
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {expiringPasses.map((p) => {
+              const days = daysUntilExpiry(p.expiry_date);
+              const msg = passMessage(p);
+              let statusText = "Expires today";
+              let statusBg = "bg-amber/20 text-amberDim border-amber/40 font-bold";
+              if (days < 0) {
+                statusText = `Expired ${Math.abs(days)} day(s) ago`;
+                statusBg = "bg-[#FBEAE8] text-stop border-stop/30 font-bold";
+              } else if (days === 1) {
+                statusText = "Expires tomorrow (1 day left)";
+                statusBg = "bg-amber/20 text-amberDim border-amber/40 font-bold";
+              } else if (days === 2) {
+                statusText = "Expires in 2 days";
+                statusBg = "bg-amber/10 text-asphalt border-amber/30 font-semibold";
+              }
+
+              return (
+                <div
+                  key={p.id}
+                  className="bg-white border-2 border-amber/40 rounded-xl p-3 sm:p-3.5 shadow-2xs hover:shadow-xs transition-shadow flex flex-col justify-between gap-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      {/* Indian Vehicle License Plate Badge */}
+                      <div className="inline-flex items-center bg-[#FFCC00] text-black font-sign font-bold text-sm px-2.5 py-0.5 rounded border border-black shadow-2xs tracking-wider">
+                        <span className="text-[8px] font-sans font-extrabold mr-1 opacity-80 border-r border-black/30 pr-1">IND</span>
+                        {p.vehicle_number}
+                      </div>
+                      <span className="ml-2 text-xs font-semibold text-steel">({p.vehicle_type})</span>
+                    </div>
+
+                    <span className={`text-[11px] px-2 py-0.5 rounded-full border ${statusBg}`}>
+                      {statusText}
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-asphalt font-medium flex flex-wrap items-center justify-between gap-x-2 gap-y-1 bg-lane/60 px-2.5 py-1.5 rounded-lg border border-steelLine/50">
+                    <span>👤 <strong className="text-asphalt">{p.driver_name || "Driver N/A"}</strong></span>
+                    <span className="font-mono text-steel">📞 {p.driver_phone || "No Phone"}</span>
+                  </div>
+
+                  {/* Mobile-optimized 2x2 Action Button Grid */}
+                  <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                    <a
+                      href={telLink(p.driver_phone || "")}
+                      className="bg-asphalt hover:bg-asphalt2 text-lane text-[11px] font-bold py-2 px-2 rounded-lg transition-colors text-center flex items-center justify-center gap-1 shadow-2xs"
+                    >
+                      📞 Call Customer
+                    </a>
+                    <a
+                      href={waLink(p.driver_phone || "", msg)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-[#25D366] hover:bg-[#20bd5a] text-white text-[11px] font-bold py-2 px-2 rounded-lg transition-colors text-center flex items-center justify-center gap-1 shadow-2xs"
+                    >
+                      💬 WhatsApp
+                    </a>
+                    <a
+                      href={smsLink(p.driver_phone || "", msg)}
+                      className="bg-[#007AFF] hover:bg-[#0062cc] text-white text-[11px] font-bold py-2 px-2 rounded-lg transition-colors text-center flex items-center justify-center gap-1 shadow-2xs"
+                    >
+                      ✉️ SMS Message
+                    </a>
+                    <button
+                      onClick={() => renewPassFromDashboard(p.id)}
+                      className="bg-amber hover:bg-amberDim text-asphalt text-[11px] font-extrabold py-2 px-2 rounded-lg transition-colors text-center flex items-center justify-center gap-1 shadow-2xs"
+                    >
+                      🔄 Quick Renew
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Modern Stat Cards Grid */}

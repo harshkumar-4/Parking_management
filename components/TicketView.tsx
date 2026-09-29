@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import type { ParkingSession } from "@/lib/types";
-import { entryMessage, exitMessage, fmtTimeShort, trackLink, waLink } from "@/lib/helpers";
+import { entryMessage, exitMessage, fmtTimeShort, smsLink, trackLink, waLink } from "@/lib/helpers";
 
 export default function TicketView({ session, onClose }: { session: ParkingSession; onClose?: () => void }) {
   const isIn = session.status === "inside";
   const [copied, setCopied] = useState(false);
+  const msg = isIn ? entryMessage(session) : exitMessage(session);
 
   function copyLink() {
     navigator.clipboard?.writeText(trackLink(session.public_token));
@@ -67,22 +68,28 @@ export default function TicketView({ session, onClose }: { session: ParkingSessi
           {isIn ? "🟢 VEHICLE INSIDE" : "🔴 VEHICLE EXITED"}
         </div>
 
-        <div className="flex flex-col xs:flex-row gap-2.5 mt-4">
+        <div className="grid grid-cols-2 gap-2 mt-4">
           <a
-            href={waLink(session.driver_phone, isIn ? entryMessage(session) : exitMessage(session))}
+            href={waLink(session.driver_phone, msg)}
             target="_blank"
             rel="noreferrer"
-            className="flex-1 text-center bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-sm py-2.5 px-3 rounded-lg shadow-sm transition-all active:scale-[0.98] flex items-center justify-center gap-1.5"
+            className="text-center bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold text-xs py-2.5 px-2 rounded-lg shadow-sm transition-all active:scale-[0.98] flex items-center justify-center gap-1"
           >
-            <span>Send WhatsApp</span>
+            <span>💬 WhatsApp</span>
           </a>
-          <button
-            onClick={copyLink}
-            className="border border-steelLine hover:bg-lane text-asphalt font-semibold text-sm px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1 shrink-0"
+          <a
+            href={smsLink(session.driver_phone, msg)}
+            className="text-center bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-2 rounded-lg shadow-sm transition-all active:scale-[0.98] flex items-center justify-center gap-1"
           >
-            {copied ? "✓ Copied!" : "Copy link"}
-          </button>
+            <span>💬 Send SMS</span>
+          </a>
         </div>
+        <button
+          onClick={copyLink}
+          className="w-full mt-2 border border-steelLine hover:bg-lane text-asphalt font-semibold text-xs py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1"
+        >
+          {copied ? "✓ Link Copied!" : "Copy Public Link"}
+        </button>
 
         <p className="text-center text-[11px] text-steel mt-3">
           Public tracking page — no login needed for driver.
@@ -93,6 +100,7 @@ export default function TicketView({ session, onClose }: { session: ParkingSessi
 }
 
 function Row({ k, v, last, isVehicle }: { k: string; v: string; last?: boolean; isVehicle?: boolean }) {
+
   return (
     <div className={`flex justify-between items-center text-sm py-2 ${last ? "" : "border-b border-dotted border-steelLine"}`}>
       <span className="text-steel text-xs sm:text-sm">{k}</span>
